@@ -10,3 +10,9 @@ Author: Jose Ignacio Alvira
 
 (Optional):
 - tensorflow-gpu: 2.2.0
+
+### Usage
+
+scVAE.py contains all the necessary functions and class definitions to create your
+own VAE model. In `train.py` and `train.ipynb` you can find an example on how to use it
+the results for a simulated dataset.
