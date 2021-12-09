@@ -238,3 +238,115 @@ class VAE(tf.keras.Model):
         # inputs = encoder.get_layer(index=0)
         model = tf.keras.Model(inputs=tf.keras.Input(self.n_input), outputs=self.decoder(self.encoder.get_layer(index=-1)))
         model.save(filepath, save_format=format, overwrite=overwrite, include_optimizer=optimizer)
+
+
+#########################################
+######## Useful callback(s) #############
+#########################################
+
+import matplotlib.pyplot as plt
+import sklearn as sk
+import seaborn as sns
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import classification_report
+
+class accuracy_per_epoch(tf.keras.callbacks.Callback):
+    """
+    This class is used to monitor the predictive power of the latent space while training.
+    It takes up a VAE model to be trained, the data, the labels and a name to display results.
+    It is a subclass of the Keras Callback class and is to be used as a callback during training.
+    """
+    def __init__(self, model, data, clusters, name):
+        self.model = model
+        self.data = data
+        self.name = name
+        self.clusters = clusters # Labels of the data
+        self.accuracies = []
+
+    def on_epoch_end(self, epoch, logs=None):
+        """
+        Returns the accuracy of a random forest classifier at the end of one epoch of training
+        """
+        assert isinstance(self.model, VAE)
+        _, _, latent = self.model.get_encoder().predict(self.data.to_numpy().astype(np.float32))
+        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(latent, self.clusters["Cluster Nr"], test_size=0.33, random_state=101)
+        rfc = RandomForestClassifier(n_estimators=250)
+        rfc.fit(self.X_train, self.y_train)
+        self.accuracies.append(rfc.score(self.X_test, self.y_test))
+
+    def accuracy_plot(self, save_figure=True):
+        """
+        Plots the evolution of the accuracies over the epochs (after training) and
+        saves the plot if desired.
+        """
+        plt.plot(self.accuracies)
+        plt.xlabel("Epoch")
+        plt.ylabel("Test Accuracy")
+        plt.title(self.name)
+        plt.axhline(y=0.72545, color="g")
+        if save_figure:
+            plt.savefig("./AccuracyPerEpoch-{}.png".format(self.name))
+        # plt.close()
+
+    def metrics_report(self):
+        """"Returns the sklearn classification report of the classifier after training"""
+        _, _, latent = self.model.get_encoder().predict(self.data.to_numpy().astype(np.float32))
+        self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(latent, self.clusters["Cluster Nr"], test_size=0.33, random_state=101)
+        rfc = RandomForestClassifier(n_estimators=250)
+        rfc.fit(self.X_train, self.y_train)
+        predicted = rfc.predict(self.X_test)
+        report_dict = classification_report(self.y_test, predicted, output_dict = True)
+        return report_dict
+
+    def show_accuracy_plot(self):
+        """Shows the accuracy plot"""
+        plt.plot(self.accuracies)
+        plt.xlabel("Epoch")
+        plt.ylabel("Test Accuracy")
+        plt.title(self.name)
+        plt.axhline(y=0.72545, color="g")
+        # if save_figure:
+        #     plt.savefig("/content/drive/MyDrive/Thesis notebooks/Plots/Synthetic/AccuracyPerEpoch-{}.png".format(self.name))
+        plt.show()
+
+
+class WarmingupKL(tf.keras.callbacks.Callback):
+    """
+    Callback to be used during training that implements a (linear) warming-up function
+    of the beta parameter (KL weight in the loss function). It starts at 0 and gradually
+    increases to the specified value. This can be useful to avoid KL divergence collapse
+    at the beginning of the training loop.
+    """
+    def __init__(self, model, warmup_epochs, max_value, function):
+        """
+        model: instance of VAE model
+        warmup_epochs: number of epochs that the warming-up will take
+        max_value: maximum value of beta
+        function: function to increase beta per epoch: 'linear' or 'sigmoid'
+        """
+        self.model = model
+        self.warmup_epochs = warmup_epochs
+        self.max_value = max_value
+        self.function = function
+
+    # def calculate_beta_linear(warmup_epochs, epoch, max_value=1):
+    #     #if max_value is set to an integer, the weight will increase during warmup epochs until that value
+    #     return min(max_value/warmup_epochs * epoch, max_value)
+    #
+    # def calculate_beta_sigmoid(warmup_epochs, epoch, max_value=1):
+    #     return max_value * 1/(warmup_epochs + np.exp(-epoch)) #sigmoid
+
+    def on_epoch_begin(self, epoch, logs=None):
+        """Updates beta at the end of an epoch"""
+        assert isinstance(self.model, VAE)
+        if self.function.lower() == "linear":
+            self.model.set_kl_weight(min(self.max_value/self.warmup_epochs * epoch, self.max_value))
+
+        elif self.function.lower() == "sigmoid":
+            # self.model.set_kl_weight(self.calculate_beta_sigmoid(self.warmup_epochs, epoch, self.max_value))
+            self.model.set_kl_weight(self.max_value * 1/(self.warmup_epochs + np.exp(-epoch)))
+        else:
+            raise Exception("That function is either not defined or understood")
