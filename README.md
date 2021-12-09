@@ -6,6 +6,7 @@ Author: Jose Ignacio Alvira
 - numpy: 1.19.1
 - pandas: 1.1.3
 - scikit-learn: 0.23.2
-- tensorflow: 2..2.0
+- tensorflow: 2.2.0
+
 (Optional):
 - tensorflow-gpu: 2.2.0
