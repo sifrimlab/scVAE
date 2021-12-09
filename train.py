@@ -21,7 +21,7 @@ from tensorflow.keras.callbacks import LearningRateScheduler
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 
-from scVAE.py import *
+from scVAE import *
 
 # Read in and get the data in the correct formatting
 raw_data = pd.read_csv("./Example Data/synthetic_2K_features.csv")
